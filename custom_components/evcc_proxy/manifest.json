@@ -1,7 +1,7 @@
 {
   "domain": "evcc_proxy",
   "name": "evcc Proxy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "documentation": "https://github.com/16Janis12/HACS_Widgets/blob/main/evcc-hmac-widget/README.md",
   "issue_tracker": "https://github.com/16Janis12/HACS_Widgets/issues",
   "codeowners": ["@16Janis12"],
