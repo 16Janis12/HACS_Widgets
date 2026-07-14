@@ -63,13 +63,47 @@ All cards ship a **visual editor**, so you rarely need YAML.
 The key is stored in the dashboard config and is **visible to anyone who can
 view the dashboard's source** — only use it on a trusted local network.
 
-## ⚠️ CORS setup (read this if controls fail)
+## ⚠️ Fix "cannot reach evcc" (read this if cards fail)
+
+There are two distinct causes — check which error you got.
+
+### Mixed content: "wurde blockiert" / dashboard is https, evcc is http
+
+If your Home Assistant is served over **https** (e.g. Nabu Casa, a reverse
+proxy with a real cert) and your evcc `url` is plain `http://evcc.local:7070`,
+the browser blocks the request as **mixed active content** before it's even
+sent. This is *not* CORS, and adding CORS headers won't fix it — evcc itself
+must be reachable over **https**.
+
+Easiest fix: put a TLS-terminating proxy in front of evcc. **Caddy** gets you
+there in one block (automatic Let's Encrypt cert, no manual TLS config):
+
+```caddy
+evcc.example.com {
+    reverse_proxy localhost:7070
+}
+```
+
+Run it (Docker):
+
+```bash
+docker run -d --name evcc-proxy --network host \
+  -v caddy_data:/data \
+  caddy caddy reverse-proxy --from evcc.example.com --to localhost:7070
+```
+
+Then point the card at `url: https://evcc.example.com` instead of the
+`http://` address. This also happens to satisfy CORS if you add the headers
+below, so if you're setting up a proxy anyway, do both at once.
+
+### CORS: writes fail but reads/state work, both sides same scheme
 
 Because the cards call evcc from your browser, evcc must allow your Home
 Assistant origin. evcc does **not** send permissive CORS headers on `/api/*` by
-default, so cross-origin writes will fail with a *"cannot reach evcc"* message.
+default, so cross-origin writes will fail with a *"cannot reach evcc"* message
+even when both URLs use the same http/https scheme.
 
-Put evcc behind a reverse proxy that adds CORS for your HA origin. **Caddy:**
+Add CORS headers on the same reverse proxy. **Caddy:**
 
 ```caddy
 evcc.example.com {

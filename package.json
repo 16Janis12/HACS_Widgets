@@ -1,6 +1,6 @@
 {
   "name": "evcc-hmac-widget",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A suite of premium Lovelace cards for controlling and monitoring evcc directly from Home Assistant.",
   "type": "module",
   "license": "MIT",

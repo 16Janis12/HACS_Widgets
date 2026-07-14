@@ -130,14 +130,22 @@ export abstract class EvccBaseCard extends LitElement {
       <div class="error rise">
         <strong>evcc unreachable.</strong>
         <div>${s.error}</div>
-        ${s.isCorsError
+        ${s.isMixedContentError
           ? html`<div style="margin-top:6px">
-              This is usually CORS. Add
-              <code>Access-Control-Allow-Origin</code> for this dashboard's origin
-              in front of evcc, or route writes through Home Assistant — see the
-              README.
+              This dashboard is https:// but evcc's URL is http:// — browsers
+              block that as <em>mixed content</em> (not CORS). Put evcc behind
+              a TLS-terminating proxy, e.g. Caddy (auto-HTTPS, one block) —
+              see the README, then change the card's <code>url</code> to the
+              https:// address.
             </div>`
-          : nothing}
+          : s.isCorsError
+            ? html`<div style="margin-top:6px">
+                This is usually CORS. Add
+                <code>Access-Control-Allow-Origin</code> for this dashboard's
+                origin in front of evcc, or route writes through Home
+                Assistant — see the README.
+              </div>`
+            : nothing}
       </div>
     `;
   }

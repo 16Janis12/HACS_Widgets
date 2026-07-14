@@ -6,6 +6,7 @@ export interface EvccStoreStatus {
   connected: boolean; // live socket up
   error: string | null;
   isCorsError: boolean;
+  isMixedContentError: boolean;
 }
 
 type Listener = (status: EvccStoreStatus) => void;
@@ -30,6 +31,7 @@ export class EvccStore {
     connected: false,
     error: null,
     isCorsError: false,
+    isMixedContentError: false,
   };
   private ws?: WebSocket;
   private pollTimer?: number;
@@ -84,10 +86,10 @@ export class EvccStore {
   private async refetch() {
     try {
       const state = await this.client.getState();
-      this.emit({ state, error: null, isCorsError: false });
+      this.emit({ state, error: null, isCorsError: false, isMixedContentError: false });
     } catch (e) {
       const err = e as EvccApiError;
-      this.emit({ error: err.message, isCorsError: !!err.isCors });
+      this.emit({ error: err.message, isCorsError: !!err.isCors, isMixedContentError: !!err.isMixedContent });
     }
   }
 

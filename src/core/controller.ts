@@ -9,7 +9,13 @@ import type { EvccStoreStatus } from './store';
  */
 export class EvccController implements ReactiveController {
   private unsub?: () => void;
-  status: EvccStoreStatus = { state: null, connected: false, error: null, isCorsError: false };
+  status: EvccStoreStatus = {
+    state: null,
+    connected: false,
+    error: null,
+    isCorsError: false,
+    isMixedContentError: false,
+  };
   client!: EvccApiClient;
 
   constructor(

@@ -12,6 +12,7 @@ export class EvccApiError extends Error {
     message: string,
     readonly status?: number,
     readonly isCors = false,
+    readonly isMixedContent = false,
   ) {
     super(message);
     this.name = 'EvccApiError';
@@ -52,7 +53,24 @@ export class EvccApiClient {
     return h;
   }
 
+  /** True when the dashboard is on https:// but evcc's URL is plain http:// — the browser blocks this as mixed content before any request (or CORS check) happens. */
+  private isMixedContentBlocked(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      window.location?.protocol === 'https:' &&
+      this.base.startsWith('http://')
+    );
+  }
+
   private async request<T>(method: string, path: string): Promise<T> {
+    if (this.isMixedContentBlocked()) {
+      throw new EvccApiError(
+        `Cannot reach evcc at ${this.base}: this dashboard is loaded over https:// but evcc's URL is http://, and browsers block that ("mixed active content") before the request is even sent. This is not CORS. Serve evcc over https:// instead (see README).`,
+        undefined,
+        false,
+        true,
+      );
+    }
     let res: Response;
     try {
       res = await fetch(`${this.apiBase}${path}`, {

@@ -52,6 +52,14 @@ describe('EvccApiClient', () => {
     await expect(c.getState()).rejects.toBeInstanceOf(EvccApiError);
   });
 
+  it('rejects http:// evcc urls as mixed content when the page is https, without calling fetch', async () => {
+    const spy = mockFetch(() => ({}));
+    vi.stubGlobal('window', { location: { protocol: 'https:' } });
+    const c = new EvccApiClient({ url: 'http://evcc.local:7070' });
+    await expect(c.getState()).rejects.toMatchObject({ isMixedContent: true, isCors: false });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('maps 401/403 to an auth error', async () => {
     mockFetch(() => ({ ok: false, status: 403 }));
     const c = new EvccApiClient({ url: 'http://x', apiKey: 'evcc_x' });
