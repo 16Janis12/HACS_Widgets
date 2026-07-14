@@ -27,11 +27,11 @@ authenticated writes and need an API key (see below).
 
 ## Install (HACS)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=16Janis12&repository=HACS_Widgets&category=dashboard)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=16Janis12&repository=HACS_Widgets&category=plugin)
 
 Click the button above (opens HACS on your own HA instance), or manually:
 
-1. HACS → ⋮ → **Custom repositories** → add this repo, category **Dashboard**.
+1. HACS → ⋮ → **Custom repositories** → add this repo, category **Plugin (Lovelace)**.
 2. Install **evcc Card Suite**. HACS registers the resource automatically.
 3. Add a card, search "evcc", pick one, and set the **evcc URL**.
 
