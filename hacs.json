@@ -1,0 +1,6 @@
+{
+  "name": "evcc Card Suite",
+  "filename": "evcc-cards.js",
+  "render_readme": true,
+  "homeassistant": "2024.4.0"
+}

@@ -1,0 +1,190 @@
+import type { BatteryMode, ChargeMode, EvccState, GridSession, TariffSlot } from './types';
+
+export interface EvccApiConfig {
+  /** Base URL of the evcc instance, e.g. http://evcc.local:7070 */
+  url: string;
+  /** Long-lived `evcc_` API key for authenticated writes (optional; reads are public). */
+  apiKey?: string;
+}
+
+export class EvccApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly isCors = false,
+  ) {
+    super(message);
+    this.name = 'EvccApiError';
+  }
+}
+
+/**
+ * Thin, typed wrapper around the evcc REST API. Methods map 1:1 to endpoints.
+ * Reads (`/api/state`, `/api/tariff`) are public; writes require an `evcc_`
+ * bearer key. A network error on a same-page cross-origin request is surfaced
+ * as an `EvccApiError` with `isCors` so cards can show actionable guidance.
+ */
+export class EvccApiClient {
+  private readonly base: string;
+  private readonly apiKey?: string;
+
+  constructor(config: EvccApiConfig) {
+    this.base = config.url.replace(/\/+$/, '');
+    this.apiKey = config.apiKey?.trim() || undefined;
+  }
+
+  get apiBase(): string {
+    return `${this.base}/api`;
+  }
+
+  /** ws(s):// origin for the live socket. */
+  get wsBase(): string {
+    return this.base.replace(/^http/, 'ws');
+  }
+
+  hasAuth(): boolean {
+    return !!this.apiKey;
+  }
+
+  private headers(): HeadersInit {
+    const h: Record<string, string> = { Accept: 'application/json' };
+    if (this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
+    return h;
+  }
+
+  private async request<T>(method: string, path: string): Promise<T> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.apiBase}${path}`, {
+        method,
+        headers: this.headers(),
+        mode: 'cors',
+      });
+    } catch {
+      // A rejected fetch (not an HTTP error) on a cross-origin call is almost
+      // always CORS or an unreachable host.
+      throw new EvccApiError(
+        `Cannot reach evcc at ${this.base}. Check the URL, or enable CORS on evcc (see README).`,
+        undefined,
+        true,
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new EvccApiError('evcc rejected the request — API key missing or invalid.', res.status);
+    }
+    if (!res.ok) {
+      throw new EvccApiError(`evcc returned HTTP ${res.status} for ${method} ${path}`, res.status);
+    }
+    if (res.status === 204) return undefined as T;
+    const body = await res.json().catch(() => undefined);
+    // evcc wraps some responses in { result: ... }; unwrap transparently.
+    return body && typeof body === 'object' && 'result' in body ? body.result : body;
+  }
+
+  // ---- Reads -------------------------------------------------------------
+  getState(): Promise<EvccState> {
+    return this.request<EvccState>('GET', '/state');
+  }
+
+  getTariff(type: 'grid' | 'feedin' | 'co2' | 'planner' | 'solar'): Promise<TariffSlot[]> {
+    return this.request<{ rates?: TariffSlot[] } | TariffSlot[]>('GET', `/tariff/${type}`).then(
+      (r) => (Array.isArray(r) ? r : (r?.rates ?? [])),
+    );
+  }
+
+  getGridSessions(): Promise<GridSession[]> {
+    return this.request<GridSession[]>('GET', '/gridsessions').catch(() => []);
+  }
+
+  // ---- Loadpoint control -------------------------------------------------
+  setMode(lp: number, mode: ChargeMode) {
+    return this.request('POST', `/loadpoints/${lp}/mode/${mode}`);
+  }
+  setLimitSoc(lp: number, soc: number) {
+    return this.request('POST', `/loadpoints/${lp}/limitsoc/${soc}`);
+  }
+  setLimitEnergy(lp: number, kWh: number) {
+    return this.request('POST', `/loadpoints/${lp}/limitenergy/${kWh}`);
+  }
+  setMinCurrent(lp: number, a: number) {
+    return this.request('POST', `/loadpoints/${lp}/mincurrent/${a}`);
+  }
+  setMaxCurrent(lp: number, a: number) {
+    return this.request('POST', `/loadpoints/${lp}/maxcurrent/${a}`);
+  }
+  setPhases(lp: number, phases: 0 | 1 | 3) {
+    return this.request('POST', `/loadpoints/${lp}/phases/${phases}`);
+  }
+  setLoadpointSmartCostLimit(lp: number, cost: number) {
+    return this.request('POST', `/loadpoints/${lp}/smartcostlimit/${cost}`);
+  }
+  clearLoadpointSmartCostLimit(lp: number) {
+    return this.request('DELETE', `/loadpoints/${lp}/smartcostlimit`);
+  }
+
+  // ---- Vehicle & plan ----------------------------------------------------
+  assignVehicle(lp: number, name: string) {
+    return this.request('POST', `/loadpoints/${lp}/vehicle/${encodeURIComponent(name)}`);
+  }
+  detectVehicle(lp: number) {
+    return this.request('PATCH', `/loadpoints/${lp}/vehicle`);
+  }
+  removeVehicle(lp: number) {
+    return this.request('DELETE', `/loadpoints/${lp}/vehicle`);
+  }
+  setVehicleLimitSoc(name: string, soc: number) {
+    return this.request('POST', `/vehicles/${encodeURIComponent(name)}/limitsoc/${soc}`);
+  }
+  setVehicleMinSoc(name: string, soc: number) {
+    return this.request('POST', `/vehicles/${encodeURIComponent(name)}/minsoc/${soc}`);
+  }
+  setVehiclePlan(name: string, soc: number, timestamp: string) {
+    return this.request(
+      'POST',
+      `/vehicles/${encodeURIComponent(name)}/plan/soc/${soc}/${timestamp}`,
+    );
+  }
+  clearVehiclePlan(name: string) {
+    return this.request('DELETE', `/vehicles/${encodeURIComponent(name)}/plan/soc`);
+  }
+
+  // ---- Battery / site ----------------------------------------------------
+  setBatteryMode(mode: BatteryMode | 'normal' | 'hold' | 'charge') {
+    return this.request('POST', `/batterymode/${mode}`);
+  }
+  clearBatteryMode() {
+    return this.request('DELETE', '/batterymode');
+  }
+  setBufferSoc(soc: number) {
+    return this.request('POST', `/buffersoc/${soc}`);
+  }
+  setBufferStartSoc(soc: number) {
+    return this.request('POST', `/bufferstartsoc/${soc}`);
+  }
+  setPrioritySoc(soc: number) {
+    return this.request('POST', `/prioritysoc/${soc}`);
+  }
+  setBatteryGridChargeLimit(cost: number) {
+    return this.request('POST', `/batterygridchargelimit/${cost}`);
+  }
+  clearBatteryGridChargeLimit() {
+    return this.request('DELETE', '/batterygridchargelimit');
+  }
+
+  // ---- External control (§14a EnWG / §9 EEG) -----------------------------
+  setSmartCostLimit(cost: number) {
+    return this.request('POST', `/smartcostlimit/${cost}`);
+  }
+  clearSmartCostLimit() {
+    return this.request('DELETE', '/smartcostlimit');
+  }
+  setSmartFeedInPriorityLimit(cost: number) {
+    return this.request('POST', `/smartfeedinprioritylimit/${cost}`);
+  }
+  clearSmartFeedInPriorityLimit() {
+    return this.request('DELETE', '/smartfeedinprioritylimit');
+  }
+  setResidualPower(power: number) {
+    return this.request('POST', `/residualpower/${power}`);
+  }
+}

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>evcc Card Suite — demo</title>
+    <style>
+      :root {
+        /* A few Home Assistant theme variables so the cards feel at home. */
+        --primary-text-color: #e6e8ee;
+        --secondary-text-color: #9aa0ad;
+        --divider-color: rgba(150, 156, 168, 0.2);
+        --card-background-color: #1b1d23;
+        --ha-card-border-radius: 16px;
+        --ha-card-box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+        --primary-color: #10bd6c;
+      }
+      body {
+        margin: 0;
+        padding: 32px;
+        background: radial-gradient(1200px 600px at 30% -10%, #24303a, #101216 60%);
+        font-family: -apple-system, system-ui, sans-serif;
+        min-height: 100vh;
+      }
+      h1 {
+        color: #e6e8ee;
+        font-weight: 300;
+        letter-spacing: 0.02em;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      .theme {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      button {
+        background: #10bd6c;
+        color: #fff;
+        border: 0;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font: inherit;
+      }
+    </style>
+    <script>
+      // --- Mock evcc backend -------------------------------------------------
+      const state = {
+        siteTitle: 'Home',
+        currency: 'EUR',
+        gridPower: 820,
+        homePower: 640,
+        pvPower: 3450,
+        batteryPower: -1200,
+        batterySoc: 72,
+        batteryMode: 'normal',
+        batteryEnergy: 7.2,
+        bufferSoc: 20,
+        prioritySoc: 50,
+        batteryGridChargeLimit: null,
+        residualPower: 0,
+        greenShareHome: 0.86,
+        tariffGrid: 0.284,
+        smartCostLimit: 0.2,
+        smartFeedInPriorityLimit: null,
+        vehicles: {
+          ioniq: { title: 'Ioniq 5', capacity: 77, limitSoc: 80, minSoc: 20 },
+          zoe: { title: 'Renault Zoe', capacity: 52, limitSoc: 100, minSoc: 30 },
+        },
+        loadpoints: [
+          {
+            title: 'Garage',
+            charging: true,
+            connected: true,
+            enabled: true,
+            mode: 'pv',
+            chargePower: 4100,
+            phasesActive: 3,
+            sessionEnergy: 12.4,
+            chargeRemainingDuration: 5400,
+            vehicleName: 'ioniq',
+            vehicleTitle: 'Ioniq 5',
+            vehicleSoc: 61,
+            limitSoc: 80,
+            minCurrent: 6,
+            maxCurrent: 16,
+            effectivePlanTime: new Date(Date.now() + 14 * 3600e3).toISOString(),
+            effectivePlanSoc: 80,
+          },
+          {
+            title: 'Carport',
+            charging: false,
+            connected: false,
+            mode: 'off',
+            chargePower: 0,
+            vehicleName: 'zoe',
+            vehicleTitle: 'Renault Zoe',
+            limitSoc: 100,
+            minCurrent: 6,
+            maxCurrent: 32,
+          },
+        ],
+      };
+
+      function tariff(type) {
+        const now = Date.now();
+        return {
+          rates: Array.from({ length: 30 }, (_, i) => {
+            const start = new Date(now + i * 3600e3);
+            const wave = 0.18 + 0.16 * Math.abs(Math.sin((i + 3) / 3));
+            return {
+              start: start.toISOString(),
+              end: new Date(now + (i + 1) * 3600e3).toISOString(),
+              price: type === 'co2' ? undefined : wave,
+              value: type === 'co2' ? 120 + 90 * Math.sin(i / 4) : undefined,
+            };
+          }),
+        };
+      }
+
+      const realFetch = window.fetch;
+      window.fetch = async (url, init) => {
+        const u = String(url);
+        if (u.includes('/api/state')) return json({ result: state });
+        if (u.includes('/api/tariff/')) return json(tariff(u.split('/api/tariff/')[1]));
+        if (u.includes('/api/gridsessions'))
+          return json([
+            { created: new Date(Date.now() - 2 * 864e5).toISOString(), finished: new Date().toISOString() },
+          ]);
+        // Writes: mutate the mock state so the UI reflects changes.
+        const m = u.match(/\/api\/loadpoints\/(\d+)\/mode\/(\w+)/);
+        if (m) {
+          state.loadpoints[+m[1]].mode = m[2];
+          return new Response(null, { status: 204 });
+        }
+        return new Response(null, { status: 204 });
+        function json(body) {
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+      };
+
+      // Fake WebSocket that jitters PV/battery so the flow animates.
+      class FakeWS {
+        constructor() {
+          setTimeout(() => this.onopen && this.onopen(), 50);
+          setInterval(() => {
+            state.pvPower = Math.max(0, 3450 + (Math.random() - 0.5) * 600);
+            this.onmessage && this.onmessage({ data: JSON.stringify({ pvPower: state.pvPower }) });
+          }, 2500);
+        }
+        close() {}
+      }
+      window.WebSocket = FakeWS;
+    </script>
+  </head>
+  <body>
+    <h1 style="text-align: center">evcc Card Suite</h1>
+    <div class="grid" id="grid"></div>
+
+    <script type="module">
+      import '../dist/evcc-cards.js';
+      const grid = document.getElementById('grid');
+      const cards = [
+        { type: 'evcc-status-card' },
+        { type: 'evcc-glance-card' },
+        { type: 'evcc-loadpoint-card', loadpoint: 0, api_key: 'evcc_demo' },
+        { type: 'evcc-battery-card', api_key: 'evcc_demo' },
+        { type: 'evcc-vehicle-card', vehicle: 'ioniq', api_key: 'evcc_demo' },
+        { type: 'evcc-plan-card', vehicle: 'ioniq', api_key: 'evcc_demo' },
+        { type: 'evcc-tariff-card', tariff: 'grid' },
+        { type: 'evcc-external-control-card', api_key: 'evcc_demo' },
+      ];
+      for (const cfg of cards) {
+        const el = document.createElement(cfg.type);
+        el.setConfig({ url: 'http://demo:7070', ...cfg });
+        grid.appendChild(el);
+      }
+    </script>
+  </body>
+</html>
