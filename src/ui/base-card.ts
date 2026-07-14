@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { EvccController } from '../core/controller';
-import type { EvccBaseConfig } from '../core/ha';
+import type { EvccBaseConfig, HomeAssistantLike } from '../core/ha';
 import type { EvccState } from '../core/types';
 import { shell, tokens } from './styles';
 
@@ -48,7 +48,12 @@ export abstract class EvccBaseCard extends LitElement {
     this.config = config;
     // Re-create the controller if connection params changed.
     if (this.ctrl) this.removeController(this.ctrl);
-    this.ctrl = new EvccController(this, config.url, config.api_key);
+    this.ctrl = new EvccController(
+      this,
+      config.url,
+      config.api_key,
+      () => (this.hass as HomeAssistantLike | undefined)?.auth?.data?.access_token,
+    );
   }
 
   getCardSize(): number {
@@ -133,17 +138,18 @@ export abstract class EvccBaseCard extends LitElement {
         ${s.isMixedContentError
           ? html`<div style="margin-top:6px">
               This dashboard is https:// but evcc's URL is http:// — browsers
-              block that as <em>mixed content</em> (not CORS). Put evcc behind
-              a TLS-terminating proxy, e.g. Caddy (auto-HTTPS, one block) —
-              see the README, then change the card's <code>url</code> to the
-              https:// address.
+              block that as <em>mixed content</em> (not CORS). Easiest fix:
+              install the <strong>evcc Proxy</strong> Home Assistant
+              integration and set this card's <code>url</code> to
+              <code>/api/evcc_proxy/&lt;slug&gt;</code> — see the README.
             </div>`
           : s.isCorsError
             ? html`<div style="margin-top:6px">
-                This is usually CORS. Add
+                This is usually CORS. Install the <strong>evcc Proxy</strong>
+                Home Assistant integration and point <code>url</code> at
+                <code>/api/evcc_proxy/&lt;slug&gt;</code>, or add
                 <code>Access-Control-Allow-Origin</code> for this dashboard's
-                origin in front of evcc, or route writes through Home
-                Assistant — see the README.
+                origin in front of evcc — see the README.
               </div>`
             : nothing}
       </div>

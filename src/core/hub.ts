@@ -15,11 +15,15 @@ const registry = new Map<string, Entry>();
  * url + apiKey so an authenticated card and an anonymous card to the same host
  * don't collide.
  */
-export function getEvccHub(url: string, apiKey?: string): Entry {
+export function getEvccHub(
+  url: string,
+  apiKey?: string,
+  getAuthToken?: () => string | undefined,
+): Entry {
   const key = `${url.replace(/\/+$/, '')}::${apiKey ?? ''}`;
   let entry = registry.get(key);
   if (!entry) {
-    const client = new EvccApiClient({ url, apiKey });
+    const client = new EvccApiClient({ url, apiKey, getAuthToken });
     entry = { client, store: new EvccStore(client), key };
     registry.set(key, entry);
   }

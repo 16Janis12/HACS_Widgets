@@ -1,10 +1,17 @@
 import type { BatteryMode, ChargeMode, EvccState, GridSession, TariffSlot } from './types';
 
 export interface EvccApiConfig {
-  /** Base URL of the evcc instance, e.g. http://evcc.local:7070 */
+  /**
+   * Base URL of the evcc instance, e.g. `http://evcc.local:7070`. Set this to
+   * a relative path instead (e.g. `/api/evcc_proxy/<slug>`) to route through
+   * the evcc Proxy Home Assistant integration — see the README. In that case
+   * `getAuthToken` is used instead of `apiKey`.
+   */
   url: string;
-  /** Long-lived `evcc_` API key for authenticated writes (optional; reads are public). */
+  /** Long-lived `evcc_` API key for authenticated writes (optional; reads are public). Ignored when `url` is a proxy path. */
   apiKey?: string;
+  /** Returns HA's current access token; used to authenticate against a proxy path instead of `apiKey`. */
+  getAuthToken?: () => string | undefined;
 }
 
 export class EvccApiError extends Error {
@@ -28,28 +35,37 @@ export class EvccApiError extends Error {
 export class EvccApiClient {
   private readonly base: string;
   private readonly apiKey?: string;
+  private readonly getAuthToken?: () => string | undefined;
 
   constructor(config: EvccApiConfig) {
     this.base = config.url.replace(/\/+$/, '');
     this.apiKey = config.apiKey?.trim() || undefined;
+    this.getAuthToken = config.getAuthToken;
+  }
+
+  /** True when `url` is a same-origin path (the evcc Proxy integration) rather than a direct evcc URL. */
+  private get isProxied(): boolean {
+    return !/^https?:\/\//i.test(this.base);
   }
 
   get apiBase(): string {
     return `${this.base}/api`;
   }
 
-  /** ws(s):// origin for the live socket. */
+  /** ws(s):// origin for the live socket. Live updates aren't proxied — a relative `base` here yields an invalid WebSocket URL, and the store falls back to polling. */
   get wsBase(): string {
     return this.base.replace(/^http/, 'ws');
   }
 
   hasAuth(): boolean {
-    return !!this.apiKey;
+    return this.isProxied ? !!this.getAuthToken?.() : !!this.apiKey;
   }
 
   private headers(): HeadersInit {
     const h: Record<string, string> = { Accept: 'application/json' };
-    if (this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
+    const token = this.isProxied ? this.getAuthToken?.() : undefined;
+    if (token) h.Authorization = `Bearer ${token}`;
+    else if (this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
     return h;
   }
 

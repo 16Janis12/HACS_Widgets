@@ -66,6 +66,27 @@ describe('EvccApiClient', () => {
     await expect(c.setBatteryMode('hold')).rejects.toMatchObject({ status: 403 });
   });
 
+  it('sends the HA auth token (not apiKey) when url is a proxy path', async () => {
+    const spy = mockFetch(() => ({ status: 204 }));
+    const c = new EvccApiClient({
+      url: '/api/evcc_proxy/mine',
+      apiKey: 'evcc_should_be_ignored',
+      getAuthToken: () => 'ha_token_123',
+    });
+    expect(c.hasAuth()).toBe(true);
+    await c.setMode(1, 'pv');
+    const [url, init] = spy.mock.calls[0];
+    expect(url).toBe('/api/evcc_proxy/mine/api/loadpoints/1/mode/pv');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ha_token_123');
+  });
+
+  it('a proxy path is never treated as mixed content, even on https pages', async () => {
+    mockFetch(() => ({}));
+    vi.stubGlobal('window', { location: { protocol: 'https:' } });
+    const c = new EvccApiClient({ url: '/api/evcc_proxy/mine' });
+    await expect(c.getState()).resolves.toBeDefined();
+  });
+
   it('encodes vehicle names in paths', async () => {
     const spy = mockFetch(() => ({ status: 204 }));
     const c = new EvccApiClient({ url: 'http://x' });

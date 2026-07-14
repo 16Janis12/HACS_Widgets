@@ -82,7 +82,10 @@ export class EvccCardEditor extends LitElement {
         ${this.field('api_key', 'API key (for controls)', 'password', 'evcc_…')}
         <div class="hint">
           Reads work without a key. Controls need an <code>evcc_</code> API key
-          (evcc → Settings → generate). See the README for the required CORS setup.
+          (evcc → Settings → generate). If evcc fails to connect (CORS or
+          mixed-content), set URL to <code>/api/evcc_proxy/&lt;slug&gt;</code>
+          and use the evcc Proxy Home Assistant integration instead — see the
+          README.
         </div>
         ${this.field('title', 'Title (optional)')}
         ${type.includes('loadpoint')

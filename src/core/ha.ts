@@ -12,6 +12,11 @@ export interface LovelaceCard extends HTMLElement {
   getCardSize?(): number | Promise<number>;
 }
 
+/** The slice of HA's `hass` object we need — its own access token, to authenticate against the evcc Proxy integration. */
+export interface HomeAssistantLike {
+  auth?: { data?: { access_token?: string } };
+}
+
 export interface EvccBaseConfig extends LovelaceCardConfig {
   /** evcc base URL, e.g. http://evcc.local:7070 */
   url: string;

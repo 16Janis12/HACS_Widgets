@@ -65,18 +65,49 @@ view the dashboard's source** — only use it on a trusted local network.
 
 ## ⚠️ Fix "cannot reach evcc" (read this if cards fail)
 
-There are two distinct causes — check which error you got.
+Both CORS failures and https-dashboard/http-evcc **mixed-content** blocks
+("wurde blockiert...") come from the same root cause: the browser is calling
+evcc directly, cross-origin. The fix that sidesteps both at once is to stop
+doing that.
 
-### Mixed content: "wurde blockiert" / dashboard is https, evcc is http
+### Recommended: the evcc Proxy integration (no proxy server, no certs)
 
-If your Home Assistant is served over **https** (e.g. Nabu Casa, a reverse
-proxy with a real cert) and your evcc `url` is plain `http://evcc.local:7070`,
-the browser blocks the request as **mixed active content** before it's even
-sent. This is *not* CORS, and adding CORS headers won't fix it — evcc itself
-must be reachable over **https**.
+This repo ships a small Home Assistant integration, **evcc Proxy**
+(`custom_components/evcc_proxy`), that registers `/api/evcc_proxy/<slug>/*` as
+part of Home Assistant's own HTTP server. Cards then call that same-origin
+https path instead of evcc directly; Home Assistant fetches evcc itself,
+server-side, which is never subject to a browser's CORS or mixed-content
+rules. It also keeps the evcc API key out of the dashboard config — HA stores
+it, not Lovelace.
 
-Easiest fix: put a TLS-terminating proxy in front of evcc. **Caddy** gets you
-there in one block (automatic Let's Encrypt cert, no manual TLS config):
+1. Install it: HACS → ⋮ → **Custom repositories** → add this repo, category
+   **Integration** (separately from the Plugin install above) → install
+   **evcc Proxy** → restart HA if prompted.
+2. Settings → Devices & services → **Add integration** → search "evcc Proxy".
+3. Enter evcc's URL as reached *from Home Assistant* (e.g.
+   `http://evcc.local:7070` — HA calling it server-side is fine even though
+   your browser calling it isn't) and, optionally, its API key. Leave the slug
+   blank to derive one from the URL, or set your own.
+4. In each card's config, set `url` to `/api/evcc_proxy/<slug>` (the slug you
+   set, or check **Settings → Devices & services → evcc Proxy** for the
+   generated one) and drop `api_key` — auth now runs through your HA login.
+
+Caveat: the live WebSocket isn't proxied (evcc's `/ws` handshake was never
+subject to CORS to begin with, so there was nothing to fix there) — but if
+you route the initial URL through the proxy, cards fall back to 5s polling
+instead of using it, since the WS would otherwise need a direct evcc address.
+If you want push updates *and* the proxy, keep the WS path direct by editing
+`custom_components/evcc_proxy/http.py`'s target, or simply accept the poll
+fallback — most dashboards won't notice the difference.
+
+### No Home Assistant integration installs allowed? Use a reverse proxy
+
+If you'd rather not add a backend integration, put evcc behind a
+TLS-terminating reverse proxy instead — this fixes mixed content by giving
+evcc a real https address, and can add CORS headers in the same config.
+
+**Public domain, ports 80/443 reachable from the internet** — Caddy's
+automatic Let's Encrypt mode works out of the box:
 
 ```caddy
 evcc.example.com {
@@ -84,26 +115,36 @@ evcc.example.com {
 }
 ```
 
-Run it (Docker):
+**LAN-only** (e.g. `evcc.local`, no public DNS/port-forwarding — the common
+home setup, and why plain Caddy "didn't work"): automatic Let's Encrypt can't
+validate without an internet-reachable domain. Use Caddy's **internal CA**
+instead — one command, no DNS, no port forwarding:
 
 ```bash
-docker run -d --name evcc-proxy --network host \
+docker run -d --name evcc-tls-proxy --network host \
   -v caddy_data:/data \
-  caddy caddy reverse-proxy --from evcc.example.com --to localhost:7070
+  caddy caddy reverse-proxy --from evcc.local:8443 --to localhost:7070 --internal-certs
+docker exec evcc-tls-proxy caddy trust   # once, on every machine loading the dashboard
 ```
 
-Then point the card at `url: https://evcc.example.com` instead of the
-`http://` address. This also happens to satisfy CORS if you add the headers
-below, so if you're setting up a proxy anyway, do both at once.
+(`caddy trust` installs the CA into the OS/browser trust store. On phones/
+tablets you'd need to import the root cert manually — desktop-only if you
+want zero extra steps.)
 
-### CORS: writes fail but reads/state work, both sides same scheme
+Point the card at `url: https://evcc.local:8443`.
 
-Because the cards call evcc from your browser, evcc must allow your Home
-Assistant origin. evcc does **not** send permissive CORS headers on `/api/*` by
-default, so cross-origin writes will fail with a *"cannot reach evcc"* message
-even when both URLs use the same http/https scheme.
+**Already on [Tailscale](https://tailscale.com)?** `tailscale serve` gives a
+valid, publicly-trusted cert for free, no port forwarding:
 
-Add CORS headers on the same reverse proxy. **Caddy:**
+```bash
+tailscale serve --bg --https=443 http://localhost:7070
+```
+
+Point `url` at `https://<device>.<tailnet>.ts.net`.
+
+### CORS only (writes fail, reads/state work, both sides already https or already http)
+
+Add CORS headers on a reverse proxy in front of evcc. **Caddy:**
 
 ```caddy
 evcc.example.com {

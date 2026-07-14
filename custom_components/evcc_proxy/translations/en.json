@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect evcc",
+        "description": "evcc will be reached by Home Assistant itself, not by your browser. Cards should point their `url` at `/api/evcc_proxy/<slug>` afterwards.",
+        "data": {
+          "url": "evcc URL (as reached from Home Assistant)",
+          "api_key": "API key (optional, for controls)",
+          "slug": "Path slug (optional, defaults to the URL)"
+        }
+      }
+    },
+    "error": {
+      "slug_in_use": "That slug is already used by another evcc proxy instance."
+    },
+    "abort": {
+      "already_configured": "This evcc instance (slug) is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "url": "evcc URL (as reached from Home Assistant)",
+          "api_key": "API key (optional, for controls)"
+        }
+      }
+    }
+  }
+}
