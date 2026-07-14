@@ -43,9 +43,14 @@ export class EvccApiClient {
     this.getAuthToken = config.getAuthToken;
   }
 
-  /** True when `url` is a same-origin path (the evcc Proxy integration) rather than a direct evcc URL. */
+  /**
+   * True when `url` points at the evcc Proxy integration (relative, e.g.
+   * `/api/evcc_proxy/<slug>`, or absolute, e.g.
+   * `https://ha.example.com/api/evcc_proxy/<slug>`) rather than directly at
+   * evcc.
+   */
   private get isProxied(): boolean {
-    return !/^https?:\/\//i.test(this.base);
+    return !/^https?:\/\//i.test(this.base) || /\/api\/evcc_proxy\//i.test(this.base);
   }
 
   get apiBase(): string {

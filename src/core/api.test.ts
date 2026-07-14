@@ -80,6 +80,18 @@ describe('EvccApiClient', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ha_token_123');
   });
 
+  it('treats an absolute https URL to the proxy as proxied, not direct evcc, using the HA token', async () => {
+    const spy = mockFetch(() => ({ status: 204 }));
+    const c = new EvccApiClient({
+      url: 'https://homeassistant.example.com/api/evcc_proxy/mine',
+      apiKey: 'evcc_should_be_ignored',
+      getAuthToken: () => 'ha_token_123',
+    });
+    await c.setMode(1, 'pv');
+    const [, init] = spy.mock.calls[0];
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ha_token_123');
+  });
+
   it('a proxy path is never treated as mixed content, even on https pages', async () => {
     mockFetch(() => ({}));
     vi.stubGlobal('window', { location: { protocol: 'https:' } });
