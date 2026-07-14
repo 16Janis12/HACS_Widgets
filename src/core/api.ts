@@ -68,9 +68,14 @@ export class EvccApiClient {
 
   private headers(): HeadersInit {
     const h: Record<string, string> = { Accept: 'application/json' };
-    const token = this.isProxied ? this.getAuthToken?.() : undefined;
-    if (token) h.Authorization = `Bearer ${token}`;
-    else if (this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
+    if (this.isProxied) {
+      // Never send the evcc api key to the HA proxy — it authenticates with
+      // HA's own token, or not at all (which HA will 401 on, correctly).
+      const token = this.getAuthToken?.();
+      if (token) h.Authorization = `Bearer ${token}`;
+    } else if (this.apiKey) {
+      h.Authorization = `Bearer ${this.apiKey}`;
+    }
     return h;
   }
 
@@ -109,7 +114,12 @@ export class EvccApiClient {
       );
     }
     if (res.status === 401 || res.status === 403) {
-      throw new EvccApiError('evcc rejected the request — API key missing or invalid.', res.status);
+      throw new EvccApiError(
+        this.isProxied
+          ? 'Home Assistant rejected the proxy request — reload the dashboard (hass session token missing or expired) and check the slug in the URL.'
+          : 'evcc rejected the request — API key missing or invalid.',
+        res.status,
+      );
     }
     if (!res.ok) {
       throw new EvccApiError(`evcc returned HTTP ${res.status} for ${method} ${path}`, res.status);

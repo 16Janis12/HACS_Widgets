@@ -66,6 +66,18 @@ describe('EvccApiClient', () => {
     await expect(c.setBatteryMode('hold')).rejects.toMatchObject({ status: 403 });
   });
 
+  it('never falls back to apiKey when proxied, even if no HA token is available yet', async () => {
+    const spy = mockFetch(() => ({ status: 204 }));
+    const c = new EvccApiClient({
+      url: '/api/evcc_proxy/mine',
+      apiKey: 'evcc_must_not_leak_to_ha',
+      getAuthToken: () => undefined,
+    });
+    await c.setMode(1, 'pv');
+    const [, init] = spy.mock.calls[0];
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
   it('sends the HA auth token (not apiKey) when url is a proxy path', async () => {
     const spy = mockFetch(() => ({ status: 204 }));
     const c = new EvccApiClient({
