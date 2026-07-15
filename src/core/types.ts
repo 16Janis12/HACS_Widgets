@@ -99,7 +99,34 @@ export interface EvccState {
 
   loadpoints?: EvccLoadpoint[];
   vehicles?: Record<string, EvccVehicle>;
+  forecast?: EvccForecast;
 
+  [key: string]: unknown;
+}
+
+/** One day's aggregate solar production forecast (energy in Wh). */
+export interface SolarForecastDay {
+  energy?: number;
+  complete?: boolean;
+}
+
+/** A point on the solar production timeseries (`val` in watts). */
+export interface SolarForecastPoint {
+  ts: string;
+  val: number;
+}
+
+export interface SolarForecast {
+  scale?: number;
+  today?: SolarForecastDay;
+  tomorrow?: SolarForecastDay;
+  dayAfterTomorrow?: SolarForecastDay;
+  timeseries?: SolarForecastPoint[];
+  [key: string]: unknown;
+}
+
+export interface EvccForecast {
+  solar?: SolarForecast;
   [key: string]: unknown;
 }
 

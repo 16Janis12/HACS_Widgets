@@ -10,6 +10,7 @@ import './cards/battery-card';
 import './cards/vehicle-card';
 import './cards/plan-card';
 import './cards/tariff-card';
+import './cards/forecast-card';
 import './cards/external-control-card';
 
 const VERSION = '0.1.0';

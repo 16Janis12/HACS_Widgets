@@ -20,6 +20,7 @@ monitor your energy flow and control charging without leaving your dashboard.
 | `evcc-vehicle-card` | Vehicle charge limit and minimum SoC | ✔ |
 | `evcc-plan-card` | Departure planner (target SoC by time) | ✔ |
 | `evcc-tariff-card` | Grid price / CO₂ / solar forecast bars | – |
+| `evcc-forecast-card` | Solar production forecast: today/tomorrow totals + curve | – |
 | `evcc-external-control-card` | §14a EnWG / §9 EEG smart cost, feed-in & grid-charge limits | ✔ |
 
 Monitoring cards work against evcc's **public** `/api/state`. Control cards send
