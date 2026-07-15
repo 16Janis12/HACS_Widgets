@@ -15,6 +15,25 @@ const RECONCILE_MS = 15_000; // slow full poll while WS is healthy
 const POLL_MS = 5_000; // faster poll when WS is unavailable
 
 /**
+ * Newer evcc reports meters as nested `battery`/`grid` objects and drops the
+ * flat `batterySoc`/`batteryPower`/`batteryEnergy`/`gridPower` keys the cards
+ * read. Flatten the nested values back onto those fields. Mutates and returns
+ * the state; only overwrites a flat field when the nested value is present, so
+ * older (flat-only) payloads are untouched.
+ */
+function flattenMeters(s: EvccState): EvccState {
+  const b = s.battery;
+  if (b && typeof b === 'object') {
+    if (b.soc != null) s.batterySoc = b.soc;
+    if (b.power != null) s.batteryPower = b.power;
+    if (b.energy != null) s.batteryEnergy = b.energy;
+  }
+  const g = s.grid;
+  if (g && typeof g === 'object' && g.power != null) s.gridPower = g.power;
+  return s;
+}
+
+/**
  * Holds the live evcc state for one instance. Strategy:
  *  - initial `/api/state` fetch,
  *  - WebSocket carries incremental key updates (merged shallow; `loadpoints`
@@ -85,7 +104,7 @@ export class EvccStore {
 
   private async refetch() {
     try {
-      const state = await this.client.getState();
+      const state = flattenMeters(await this.client.getState());
       this.emit({ state, error: null, isCorsError: false, isMixedContentError: false });
     } catch (e) {
       const err = e as EvccApiError;
@@ -128,6 +147,7 @@ export class EvccStore {
     for (const [k, v] of Object.entries(msg)) {
       next[k] = v as never;
     }
+    flattenMeters(next);
     if (!this.status.connected) this.emit({ state: next, connected: true });
     else this.emit({ state: next });
     // Keep the reconcile cadence while healthy.

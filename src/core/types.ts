@@ -45,6 +45,19 @@ export interface EvccVehicle {
   [key: string]: unknown;
 }
 
+/**
+ * Newer evcc nests meter readings under `battery`/`grid`/`pv` objects instead
+ * of flat top-level keys. We keep reading the flat fields; the store flattens
+ * these nested shapes back onto them (see `flattenMeters`).
+ */
+export interface EvccMeter {
+  power?: number;
+  energy?: number;
+  soc?: number;
+  capacity?: number;
+  [key: string]: unknown;
+}
+
 export interface EvccState {
   siteTitle?: string;
   currency?: string;
@@ -57,6 +70,11 @@ export interface EvccState {
   batterySoc?: number;
   batteryMode?: BatteryMode;
   batteryEnergy?: number;
+
+  // Nested meter objects (newer evcc); flattened onto the fields above.
+  battery?: EvccMeter;
+  grid?: EvccMeter;
+  pv?: EvccMeter;
 
   // Battery control
   bufferSoc?: number;
