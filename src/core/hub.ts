@@ -18,12 +18,12 @@ const registry = new Map<string, Entry>();
 export function getEvccHub(
   url: string,
   apiKey?: string,
-  getAuthToken?: () => string | undefined,
+  fetchWithAuth?: (path: string, init?: RequestInit) => Promise<Response>,
 ): Entry {
   const key = `${url.replace(/\/+$/, '')}::${apiKey ?? ''}`;
   let entry = registry.get(key);
   if (!entry) {
-    const client = new EvccApiClient({ url, apiKey, getAuthToken });
+    const client = new EvccApiClient({ url, apiKey, fetchWithAuth });
     entry = { client, store: new EvccStore(client), key };
     registry.set(key, entry);
   }

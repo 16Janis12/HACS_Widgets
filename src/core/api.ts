@@ -5,13 +5,19 @@ export interface EvccApiConfig {
    * Base URL of the evcc instance, e.g. `http://evcc.local:7070`. Set this to
    * a relative path instead (e.g. `/api/evcc_proxy/<slug>`) to route through
    * the evcc Proxy Home Assistant integration — see the README. In that case
-   * `getAuthToken` is used instead of `apiKey`.
+   * `fetchWithAuth` is used instead of `apiKey`.
    */
   url: string;
   /** Long-lived `evcc_` API key for authenticated writes (optional; reads are public). Ignored when `url` is a proxy path. */
   apiKey?: string;
-  /** Returns HA's current access token; used to authenticate against a proxy path instead of `apiKey`. */
-  getAuthToken?: () => string | undefined;
+  /**
+   * HA's `hass.fetchWithAuth` — attaches (and silently refreshes) the user's
+   * access token itself, so we never touch the token directly. The
+   * `hass.auth.data.access_token` field this used to read is internal and not
+   * guaranteed to exist across HA frontend versions; `fetchWithAuth` is the
+   * stable path custom cards are meant to use for same-origin HA requests.
+   */
+  fetchWithAuth?: (path: string, init?: RequestInit) => Promise<Response>;
 }
 
 export class EvccApiError extends Error {
@@ -35,12 +41,12 @@ export class EvccApiError extends Error {
 export class EvccApiClient {
   private readonly base: string;
   private readonly apiKey?: string;
-  private readonly getAuthToken?: () => string | undefined;
+  private readonly fetchWithAuth?: (path: string, init?: RequestInit) => Promise<Response>;
 
   constructor(config: EvccApiConfig) {
     this.base = config.url.replace(/\/+$/, '');
     this.apiKey = config.apiKey?.trim() || undefined;
-    this.getAuthToken = config.getAuthToken;
+    this.fetchWithAuth = config.fetchWithAuth;
   }
 
   /**
@@ -63,19 +69,14 @@ export class EvccApiClient {
   }
 
   hasAuth(): boolean {
-    return this.isProxied ? !!this.getAuthToken?.() : !!this.apiKey;
+    return this.isProxied ? !!this.fetchWithAuth : !!this.apiKey;
   }
 
   private headers(): HeadersInit {
     const h: Record<string, string> = { Accept: 'application/json' };
-    if (this.isProxied) {
-      // Never send the evcc api key to the HA proxy — it authenticates with
-      // HA's own token, or not at all (which HA will 401 on, correctly).
-      const token = this.getAuthToken?.();
-      if (token) h.Authorization = `Bearer ${token}`;
-    } else if (this.apiKey) {
-      h.Authorization = `Bearer ${this.apiKey}`;
-    }
+    // Never send the evcc api key to the HA proxy — auth there runs through
+    // fetchWithAuth (HA's own token), which sets its own Authorization header.
+    if (!this.isProxied && this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
     return h;
   }
 
@@ -97,13 +98,13 @@ export class EvccApiClient {
         true,
       );
     }
+    const fullPath = `${this.apiBase}${path}`;
     let res: Response;
     try {
-      res = await fetch(`${this.apiBase}${path}`, {
-        method,
-        headers: this.headers(),
-        mode: 'cors',
-      });
+      res =
+        this.isProxied && this.fetchWithAuth
+          ? await this.fetchWithAuth(fullPath, { method, headers: this.headers() })
+          : await fetch(fullPath, { method, headers: this.headers(), mode: 'cors' });
     } catch {
       // A rejected fetch (not an HTTP error) on a cross-origin call is almost
       // always CORS or an unreachable host.

@@ -22,13 +22,13 @@ export class EvccController implements ReactiveController {
     private host: ReactiveControllerHost,
     private url: string,
     private apiKey?: string,
-    private getAuthToken?: () => string | undefined,
+    private fetchWithAuth?: (path: string, init?: RequestInit) => Promise<Response>,
   ) {
     host.addController(this);
   }
 
   hostConnected() {
-    const hub = getEvccHub(this.url, this.apiKey, this.getAuthToken);
+    const hub = getEvccHub(this.url, this.apiKey, this.fetchWithAuth);
     this.client = hub.client;
     this.unsub = hub.store.subscribe((s) => {
       this.status = s;

@@ -66,42 +66,49 @@ describe('EvccApiClient', () => {
     await expect(c.setBatteryMode('hold')).rejects.toMatchObject({ status: 403 });
   });
 
-  it('never falls back to apiKey when proxied, even if no HA token is available yet', async () => {
+  it('never falls back to apiKey when proxied, even without fetchWithAuth', async () => {
     const spy = mockFetch(() => ({ status: 204 }));
     const c = new EvccApiClient({
       url: '/api/evcc_proxy/mine',
       apiKey: 'evcc_must_not_leak_to_ha',
-      getAuthToken: () => undefined,
     });
     await c.setMode(1, 'pv');
     const [, init] = spy.mock.calls[0];
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
-  it('sends the HA auth token (not apiKey) when url is a proxy path', async () => {
-    const spy = mockFetch(() => ({ status: 204 }));
+  it('routes through fetchWithAuth (not raw fetch, not apiKey) when url is a proxy path', async () => {
+    const fetchWithAuth = vi.fn(
+      async (_path: string, _init?: RequestInit) => ({ ok: true, status: 204 }) as Response,
+    );
+    const spy = mockFetch(() => ({}));
     const c = new EvccApiClient({
       url: '/api/evcc_proxy/mine',
       apiKey: 'evcc_should_be_ignored',
-      getAuthToken: () => 'ha_token_123',
+      fetchWithAuth,
     });
     expect(c.hasAuth()).toBe(true);
     await c.setMode(1, 'pv');
-    const [url, init] = spy.mock.calls[0];
-    expect(url).toBe('/api/evcc_proxy/mine/api/loadpoints/1/mode/pv');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ha_token_123');
+    expect(spy).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchWithAuth.mock.calls[0];
+    expect(path).toBe('/api/evcc_proxy/mine/api/loadpoints/1/mode/pv');
+    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
-  it('treats an absolute https URL to the proxy as proxied, not direct evcc, using the HA token', async () => {
-    const spy = mockFetch(() => ({ status: 204 }));
+  it('treats an absolute https URL to the proxy as proxied, not direct evcc, using fetchWithAuth', async () => {
+    const fetchWithAuth = vi.fn(
+      async (_path: string, _init?: RequestInit) => ({ ok: true, status: 204 }) as Response,
+    );
+    const spy = mockFetch(() => ({}));
     const c = new EvccApiClient({
       url: 'https://homeassistant.example.com/api/evcc_proxy/mine',
       apiKey: 'evcc_should_be_ignored',
-      getAuthToken: () => 'ha_token_123',
+      fetchWithAuth,
     });
     await c.setMode(1, 'pv');
-    const [, init] = spy.mock.calls[0];
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ha_token_123');
+    expect(spy).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
   });
 
   it('a proxy path is never treated as mixed content, even on https pages', async () => {

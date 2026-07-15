@@ -52,7 +52,11 @@ export abstract class EvccBaseCard extends LitElement {
       this,
       config.url,
       config.api_key,
-      () => (this.hass as HomeAssistantLike | undefined)?.auth?.data?.access_token,
+      (path, init) => {
+        const hass = this.hass as HomeAssistantLike | undefined;
+        if (!hass?.fetchWithAuth) return Promise.reject(new Error('hass.fetchWithAuth unavailable'));
+        return hass.fetchWithAuth(path, init);
+      },
     );
   }
 
