@@ -19,12 +19,15 @@ PLATFORMS: list[Platform] = []
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.setdefault(DOMAIN, {})
-
-    if "_view_registered" not in hass.data[DOMAIN]:
+    # Kept out of hass.data[DOMAIN] on purpose: that dict is iterated as
+    # entry_id -> config in http.py's _forward(), and a stray sentinel value
+    # in there breaks `c[CONF_SLUG]` on every request (crashed as a 500 once
+    # requests actually got past auth).
+    if not hass.data.get(f"{DOMAIN}_view_registered"):
         hass.http.register_view(EvccProxyView(hass))
-        hass.data[DOMAIN]["_view_registered"] = True
+        hass.data[f"{DOMAIN}_view_registered"] = True
 
+    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         CONF_URL: entry.data[CONF_URL],
         CONF_API_KEY: entry.data.get(CONF_API_KEY),
